@@ -54,12 +54,13 @@
                 if (sceneToRender && sceneToRender.activeCamera) {
                     sceneToRender.render();
                 }
+                
             });
         }
 
         var engine = null;
         var scene = null;
-        var sceneToRender = null;
+        var sceneToRender = null;  
         var createDefaultEngine = function() { 
             return new BABYLON.Engine(canvas, true, { 
                 preserveDrawingBuffer: true, 
@@ -92,12 +93,24 @@
             groundMaterial.diffuseColor = BABYLON.Color3.Green();
             groundMaterial.diffuseTexture = groundTexture;
 
-            
             BABYLON.SceneLoader.ImportMesh("", Assets.meshes.Yeti.rootUrl, Assets.meshes.Yeti.filename, scene, function(newMeshes){
                 newMeshes[0].scaling = new BABYLON.Vector3(0.1, 0.1, 0.1);
             });
 
-
+            const deviceSourceManager = new BABYLON.DeviceSourceManager( engine );
+            
+            // Game loop
+            scene.registerBeforeRender( () => {
+                if ( deviceSourceManager.getDeviceSource(BABYLON.DeviceType.Keyboard) )
+                {
+                    // Get keyboard up / down inputs
+                    if ( deviceSourceManager.getDeviceSource(BABYLON.DeviceType.Keyboard).getInput( 32 ) == 1 )
+                    {
+                        //TODO: add jump
+                        console.log( "Space key pressed ");
+                    }
+                }
+            });
             return scene;
         };
 
