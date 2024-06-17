@@ -1,10 +1,61 @@
 // Get the canvas element
 const canvas = document.getElementById('renderCanvas');
 
+var hk;
 
-var startGameLoop = function( engine ) 
+var player;
+var playerAggregate;
+// Just to test
+var groundAggregate;
+
+var firstPlatform;
+var canJump = true;
+var canChangeDirection= false;
+
+
+
+let createPlatform;
+
+var gameLoop = function( engine ) 
 {
     engine.runRenderLoop( function() {
+
+        console.log("canJump: ", canJump);
+        console.log("canChangeDirection: ", canChangeDirection);
+
+        if (player.position.y <= firstPlatform.position.y - 1) {
+            alert('Game Over');
+            engine.stopRenderLoop();
+
+            // Reload to restart the game
+            window.location.reload();
+        }
+
+        hk.onCollisionObservable.add((ev) => {
+            if (ev.type === "COLLISION_STARTED" )
+            { 
+
+                const playerPosition = player.getAbsolutePosition();
+                const platformPosition = ev.collidedAgainst.transformNode.getAbsolutePosition();
+
+                // Calculate collision vector from player to platform
+                const collisionVector = platformPosition.subtract(playerPosition);
+                collisionVector.normalize();
+
+                console.log(collisionVector.y);
+
+                // Check if collision vector points upwards (adjust threshold as needed)
+                if (collisionVector.y < 0)
+                    playerAggregate.body.setLinearVelocity(new BABYLON.Vector3(0, 5, 0), player.getAbsolutePosition());
+                    canJump = true;
+                }
+        }); 
+        
+    
+        // Generate new platforms as the player ascends
+        if (player.position.y > scene.meshes[scene.meshes.length - 1].position.y - 10) {``
+            createPlatform(scene.meshes[scene.meshes.length - 1].position.y + 1);
+        }
         if ( gamesScene && gamesScene.activeCamera )
         {
             gamesScene.render();
@@ -22,7 +73,7 @@ const createScene = function() {
     const scene = new BABYLON.Scene(engine);
 
     // initialize plugin
-    const hk = new BABYLON.HavokPlugin();
+    hk = new BABYLON.HavokPlugin();
     // enable physics in the scene with a gravity
     scene.enablePhysics(new BABYLON.Vector3(0, -9.8, 0), hk);
 
@@ -32,16 +83,18 @@ const createScene = function() {
     light.intensity = 0.7;
     
     // Create the player sphere
-    const player = BABYLON.MeshBuilder.CreateSphere('player', { diameter: 1 }, scene);
+    player = BABYLON.MeshBuilder.CreateSphere('player', { diameter: 1 }, scene);
     player.position.y = 1;
 
     // Enable physics for the player
-    var playerImpostor = new BABYLON.PhysicsAggregate(player, BABYLON.PhysicsShapeType.SPHERE, { mass: 1, restitution: 0.9 }, scene);
+    playerAggregate = new BABYLON.PhysicsAggregate(player, BABYLON.PhysicsShapeType.SPHERE, { mass: 0.2, restitution: 0.5 }, scene);
+    playerAggregate.body.setCollisionCallbackEnabled(true);
+
 
     // Create ground
     const ground = BABYLON.MeshBuilder.CreateGround('ground1', { width: 10, height: 10 }, scene);
     ground.position.y = -1;
-    ground.physicsImpostor = new BABYLON.PhysicsAggregate(ground, BABYLON.PhysicsShapeType.BOX, { mass: 0, restitution: 0.9 }, scene);
+    groundAggregate = new BABYLON.PhysicsAggregate(ground, BABYLON.PhysicsShapeType.BOX, { mass: 0, restitution: 0.5 }, scene);
 
     // Create a FollowCamera
     const camera = new BABYLON.FollowCamera('followCamera', new BABYLON.Vector3(0, 10, -10), scene);
@@ -53,19 +106,21 @@ const createScene = function() {
     camera.maxCameraSpeed = 10; // Maximum speed the camera can move
 
     camera.attachControl(canvas, true);
+    camera.inputs.clear();
+
 
     // Function to create random platforms
-    const createPlatform = function(yPosition) {
-        const platform = BABYLON.MeshBuilder.CreateBox('platform', { width: 2, height: 0.5, depth: 2 }, scene);
+    createPlatform = function(yPosition) {
+        const platform = BABYLON.MeshBuilder.CreateBox('platform', { width: 2, height: 0.1, depth: 2 }, scene);
         platform.position.x = Math.random() * 10 - 5;
         platform.position.y = yPosition;
-        platform.position.z = Math.random() * 10 - 5;
-        platform.physicsImpostor = new BABYLON.PhysicsAggregate(platform, BABYLON.PhysicsShapeType.BOX, { mass: 0, restitution: 0.9 }, scene);
+        platform.position.z = 0;
+        platform.physicsImpostor = new BABYLON.PhysicsAggregate(platform, BABYLON.PhysicsShapeType.BOX, { mass: 0, restitution: 0.5 }, scene);
         return platform;
     };
 
     // Create the first platform
-    let firstPlatform = createPlatform(0);
+    firstPlatform = createPlatform(0);
 
     // Create initial platforms
     for (let i = 1; i < 10; i++) {
@@ -73,45 +128,28 @@ const createScene = function() {
     }
 
     // Function to handle jumping and movement
-    let canJump = true;
     window.addEventListener('keydown', function(event) {
         if (event.code === 'Space' && canJump) {
-            playerImpostor.body.applyImpulse(new BABYLON.Vector3(0, 5, 0), player.getAbsolutePosition());
+            playerAggregate.body.setLinearVelocity(new BABYLON.Vector3(0, 10, 0), player.getAbsolutePosition());;
             canJump = false;
         }
     });
 
+    
     window.addEventListener('keydown', function(event) {
         if (!canJump) {
             if (event.code === 'ArrowLeft') {
-                playerImpostor.body.applyImpulse(new BABYLON.Vector3(1, 0, 0), player.getAbsolutePosition());
+                playerAggregate.body.applyImpulse(new BABYLON.Vector3(1, 0, 0), player.getAbsolutePosition());
             }
             if (event.code === 'ArrowRight') {
-                playerImpostor.body.applyImpulse(new BABYLON.Vector3(-1, 0, 0), player.getAbsolutePosition());
+                playerAggregate.body.applyImpulse(new BABYLON.Vector3(-1, 0, 0), player.getAbsolutePosition());
             }
-        }
-    });
-
-    // Reset jump ability when player touches ground or platforms
-    scene.registerBeforeRender(function() {
-        if (player.position.y <= firstPlatform.position.y - 1) {
-            alert('Game Over');
-            window.location.reload();
-        }
-
-        if (player.position.y <= 1.1) {
-            canJump = true;
-        }
-
-        scene.meshes.forEach(function(mesh) {
-            if (mesh.name.startsWith('platform') && player.intersectsMesh(mesh, false)) {
-                canJump = true;
+            if (event.code === 'ArrowUp') {
+                playerAggregate.body.applyImpulse(new BABYLON.Vector3(0, 0, -3), player.getAbsolutePosition());
             }
-        });
-
-        // Generate new platforms as the player ascends
-        if (player.position.y > scene.meshes[scene.meshes.length - 1].position.y - 10) {
-            createPlatform(scene.meshes[scene.meshes.length - 1].position.y + 2);
+            if (event.code === 'ArrowDown') {
+                playerAggregate.body.applyImpulse(new BABYLON.Vector3(0, 0, 3), player.getAbsolutePosition());
+            }
         }
     });
 
@@ -138,7 +176,7 @@ window.init = async function()
     window.engine = await asyncEngineCreation();
  
     if (!engine) throw "Engine is not ready!";
-    startGameLoop(engine);
+    gameLoop(engine);
 
     window.scene = createScene();
 
